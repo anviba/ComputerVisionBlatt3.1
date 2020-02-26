@@ -35,6 +35,11 @@ def compute_loss_and_accuracy(
             output_probs = model(X_batch)
 
             # Compute Loss and Accuracy
+            average_loss = ((Y_batch * torch.log(output_probs)).sum()).mean()
+            result_output = torch.argmax(output_probs, axis=1)
+            targets = torch.argmax(Y_batch, axis=1)
+            correct = targets == result_output
+            accuracy = torch.mean(correct)
 
     return average_loss, accuracy
 
@@ -61,9 +66,28 @@ class ExampleModel(nn.Module):
                 kernel_size=5,
                 stride=1,
                 padding=2
-            )
-        )
-        # The output of feature_extractor will be [batch_size, num_filters, 16, 16]
+            ),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=num_filters,
+                out_channels=64,
+                kernel_size=5,
+                stride=1,
+                padding=2
+            ),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=128,
+                kernel_size=5,
+                stride=1,
+                padding=2
+            ),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.ReLU())
+        # The output of feature_extractor will be [batch_size, num_filters, 4, 4]
         self.num_output_features = 32*32*32
         # Initialize our last fully connected layer
         # Inputs all extracted features from the convolutional layers
@@ -72,6 +96,10 @@ class ExampleModel(nn.Module):
         # included with nn.CrossEntropyLoss
         self.classifier = nn.Sequential(
             nn.Linear(self.num_output_features, num_classes),
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(self.num_output_features, 64),
+            nn.Linear(64, num_classes),
         )
 
     def forward(self, x):
