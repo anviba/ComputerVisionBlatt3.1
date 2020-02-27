@@ -5,6 +5,7 @@ import zipfile
 files_to_include = [
     "task2.py",
     "task2_train.ipynb",
+    "task4.py"
     "task4b.py",
     "utils.py",
     "dataloaders.py"
