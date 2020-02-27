@@ -28,8 +28,7 @@ def compute_loss_and_accuracy(
     total_images = 0
     total_steps = 0
 
-    average_loss = 0
-    accuracy = 0
+
 
     with torch.no_grad():
         for (X_batch, Y_batch) in dataloader:
@@ -56,14 +55,7 @@ def compute_loss_and_accuracy(
 
     return loss_avg, accuracy
 
-            # Compute Loss and Accuracy
-           # average_loss = ((Y_batch * torch.log(output_probs)).sum()).mean()
-            #result_output = torch.argmax(output_probs, axis=1)
-           # targets = torch.argmax(Y_batch, axis=1)
-            #correct = targets == result_output
-           # accuracy = torch.mean(correct)
 
-    #return average_loss, accuracy
 
 
 class ExampleModel(nn.Module):
@@ -89,8 +81,8 @@ class ExampleModel(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(
                 in_channels=num_filters,
                 out_channels=64,
@@ -98,8 +90,8 @@ class ExampleModel(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(
                 in_channels=64,
                 out_channels=128,
@@ -119,9 +111,6 @@ class ExampleModel(nn.Module):
         # Outputs num_classes predictions, 1 for each class.
         # There is no need for softmax activation function, as this is
         # included with nn.CrossEntropyLoss
-        self.classifier = nn.Sequential(
-            nn.Linear(self.num_output_features, num_classes),
-        )
         self.classifier = nn.Sequential(
             nn.Linear(self.num_output_features, 64),
             nn.ReLU(),
@@ -188,6 +177,7 @@ class Trainer:
         self.TRAIN_LOSS = collections.OrderedDict()
         self.VALIDATION_ACC = collections.OrderedDict()
         self.TEST_ACC = collections.OrderedDict()
+        self.TRAIN_ACC = collections.OrderedDict()
 
         self.checkpoint_dir = pathlib.Path("checkpoints")
 
@@ -203,19 +193,33 @@ class Trainer:
         self.VALIDATION_ACC[self.global_step] = validation_acc
         self.VALIDATION_LOSS[self.global_step] = validation_loss
         used_time = time.time() - self.start_time
-        print(
-            f"Epoch: {self.epoch:>2}",
-            f"Batches per seconds: {self.global_step / used_time:.2f}",
-            f"Global step: {self.global_step:>6}",
-            f"Validation Loss: {validation_loss:.2f},",
-            f"Validation Accuracy: {validation_acc:.3f}",
-            sep="\t")
+
         # Compute for testing set
         test_loss, test_acc = compute_loss_and_accuracy(
             self.dataloader_test, self.model, self.loss_criterion
         )
         self.TEST_ACC[self.global_step] = test_acc
         self.TEST_LOSS[self.global_step] = test_loss
+
+        # Compute for training set
+        train_loss, train_acc = compute_loss_and_accuracy(
+            self.dataloader_train, self.model, self.loss_criterion
+        )
+        self.TRAIN_ACC[self.global_step] = train_acc
+        self.TRAIN_LOSS[self.global_step] = train_loss
+
+
+        print(
+            f"Epoch: {self.epoch:>2}",
+            f"Batches per seconds: {self.global_step / used_time:.2f}",
+            f"Global step: {self.global_step:>6}",
+            f"Validation Loss: {validation_loss:.2f},",
+            f"Validation Accuracy: {validation_acc:.3f}",
+            f"Test Loss: {test_loss:.2f},",
+            f"Test Accuracy: {test_acc:.3f}",
+            f"Train Loss: {train_loss:.2f},",
+            f"Train Accuracy: {train_acc:.3f}",
+            sep="\t")
 
         self.model.train()
 
