@@ -47,3 +47,13 @@ def torch_image_to_numpy(image: torch.Tensor):
 
 
 indices = [14, 26, 32, 49, 52]
+
+model=torchvision.models.resnet18(pretrained=True)
+"""
+forward(x):
+  x = self.con1(x)
+  x  =self.conv2(x)
+
+act1 = model.conv1(image) # 32 x W x H
+act1{14,:,:}
+"""
