@@ -1,9 +1,11 @@
-
 import matplotlib.pyplot as plt
 from PIL import Image
 import torchvision
 import torch
+import torchfunc
+from torch import nn
 import numpy as np
+import matplotlib.pyplot as plt
 image = Image.open("images/zebra.jpg")
 print("Image shape:", image.size)
 
@@ -45,15 +47,20 @@ def torch_image_to_numpy(image: torch.Tensor):
     image = np.moveaxis(image, 0, 2)
     return image
 
-
+filters= first_conv_layer.weight
 indices = [14, 26, 32, 49, 52]
 
-model=torchvision.models.resnet18(pretrained=True)
-"""
-forward(x):
-  x = self.con1(x)
-  x  =self.conv2(x)
+for i in indices:
+        # get the filter
+        f = torch_image_to_numpy(filters[i])
+        plt.imshow(f)
+        plt.savefig("filter_%d"%i)
+        plt.show()
 
-act1 = model.conv1(image) # 32 x W x H
-act1{14,:,:}
-"""
+
+for i in indices:
+        a=  torch_image_to_numpy(activation[0][i])
+        plt.imshow(a)
+        plt.savefig("activation_%d"%i)
+        plt.show()
+
