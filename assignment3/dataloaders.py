@@ -14,6 +14,9 @@ def load_cifar10(batch_size: int, validation_fraction: float = 0.1
     # Note that transform train will apply the same transform for
     # validation!
     transform_train = transforms.Compose([
+        # task 3:
+        torchvision.transforms.RandomHorizontalFlip(p=0.5),
+        torchvision.transforms.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
