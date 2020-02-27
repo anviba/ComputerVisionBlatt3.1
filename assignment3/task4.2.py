@@ -7,7 +7,27 @@ import typing
 import collections
 from torch import nn
 from dataloaders import load_cifar10
+import torchvision
 
+
+class TransL_Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = torchvision.models.resnet18(pretrained=True)
+        self.model.fc = nn.Linear(512, 10)  # No need to apply softmax,
+        # as this is done in nn.CrossEntropyLoss
+        for param in self.model.parameters():  # Freeze all parameters
+            param.requires_grad = False
+
+        for param in self.model.fc.parameters():  # Unfreeze the last fully-connected
+            param.requires_grad = True  # layer
+
+        for param in self.model.layer4.parameters():  # Unfreeze the last 5 convolutional
+            param.requires_grad = True  # layers
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
 
 def compute_loss_and_accuracy(
         dataloader: torch.utils.data.DataLoader,
@@ -57,7 +77,6 @@ def compute_loss_and_accuracy(
 
 
 
-
 class ExampleModel(nn.Module):
 
     def __init__(self,
@@ -80,42 +99,19 @@ class ExampleModel(nn.Module):
                 kernel_size=5,
                 stride=1,
                 padding=2
-            ),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(
-                in_channels=num_filters,
-                out_channels=64,
-                kernel_size=5,
-                stride=1,
-                padding=2
-            ),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(
-                in_channels=64,
-                out_channels=128,
-                kernel_size=5,
-                stride=1,
-                padding=2
-            ),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
+            )
         )
-
-        # The output of feature_extractor will be [batch_size, num_filters, 4, 4]
-        #self.num_output_features = 32*32*32
-        self.num_output_features = 4 * 4 * 128
+        # The output of feature_extractor will be [batch_size, num_filters, 16, 16]
+        self.num_output_features = 32*32*32
         # Initialize our last fully connected layer
         # Inputs all extracted features from the convolutional layers
         # Outputs num_classes predictions, 1 for each class.
         # There is no need for softmax activation function, as this is
         # included with nn.CrossEntropyLoss
         self.classifier = nn.Sequential(
-            nn.Linear(self.num_output_features, 64),
-            nn.ReLU(),
-            nn.Linear(64, num_classes),
+            nn.Linear(self.num_output_features, num_classes),
         )
+
 
     def forward(self, x):
         """
@@ -129,7 +125,7 @@ class ExampleModel(nn.Module):
         x = self.classifier(x)
         out = x
         expected_shape = (batch_size, self.num_classes)
-        assert out.shape == (batch_size, self.num_classes),\
+        assert out.shape == (batch_size, self.num_classes), \
             f"Expected output of forward pass to be: {expected_shape}, but got: {out.shape}"
         return out
 
@@ -177,7 +173,6 @@ class Trainer:
         self.TRAIN_LOSS = collections.OrderedDict()
         self.VALIDATION_ACC = collections.OrderedDict()
         self.TEST_ACC = collections.OrderedDict()
-        self.TRAIN_ACC = collections.OrderedDict()
 
         self.checkpoint_dir = pathlib.Path("checkpoints")
 
@@ -187,40 +182,25 @@ class Trainer:
             Train, validation and test.
         """
         self.model.eval()
-
         validation_loss, validation_acc = compute_loss_and_accuracy(
             self.dataloader_val, self.model, self.loss_criterion
         )
         self.VALIDATION_ACC[self.global_step] = validation_acc
         self.VALIDATION_LOSS[self.global_step] = validation_loss
         used_time = time.time() - self.start_time
-
-        # Compute for testing set
-        test_loss, test_acc = compute_loss_and_accuracy(
-            self.dataloader_test, self.model, self.loss_criterion
-        )
-        self.TEST_ACC[self.global_step] = test_acc
-        self.TEST_LOSS[self.global_step] = test_loss
-
-        # Compute for training set
-        train_loss, train_acc = compute_loss_and_accuracy(
-            self.dataloader_train, self.model, self.loss_criterion
-        )
-        self.TRAIN_ACC[self.global_step] = train_acc
-        self.TRAIN_LOSS[self.global_step] = train_loss
-
-
         print(
             f"Epoch: {self.epoch:>2}",
             f"Batches per seconds: {self.global_step / used_time:.2f}",
             f"Global step: {self.global_step:>6}",
             f"Validation Loss: {validation_loss:.2f},",
             f"Validation Accuracy: {validation_acc:.3f}",
-            f"Test Loss: {test_loss:.2f},",
-            f"Test Accuracy: {test_acc:.3f}",
-            f"Train Loss: {train_loss:.2f},",
-            f"Train Accuracy: {train_acc:.3f}",
             sep="\t")
+        # Compute for testing set
+        test_loss, test_acc = compute_loss_and_accuracy(
+            self.dataloader_test, self.model, self.loss_criterion
+        )
+        self.TEST_ACC[self.global_step] = test_acc
+        self.TEST_LOSS[self.global_step] = test_loss
 
         self.model.train()
 
@@ -323,12 +303,14 @@ def create_plots(trainer: Trainer, name: str):
 
 
 if __name__ == "__main__":
-    epochs = 10
-    batch_size = 64
-    learning_rate = 5e-2
+
+    epochs = 5
+    batch_size = 32
+    learning_rate = 5e-4
     early_stop_count = 4
+
     dataloaders = load_cifar10(batch_size)
-    model = ExampleModel(image_channels=3, num_classes=10)
+    model = TransL_Model()
     trainer = Trainer(
         batch_size,
         learning_rate,

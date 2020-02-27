@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
+import typing
 from dataloaders import load_cifar10
 
 class TransL_Model(nn.Module):
@@ -76,16 +77,26 @@ def compute_loss_and_accuracy(
 
 
 class Trainer:
-    def __init__(self):
+    def __init__(self,
+                 batch_size: int,
+                 learning_rate: float,
+                 early_stop_count: int,
+                 epochs: int,
+                 model: torch.nn.Module):
         """
                 Initialize our trainer class.
                 Set hyperparameters, architecture, tracking variables etc.
                 """
         # Define hyperparameters
-        self.epochs = 5
-        self.batch_size = 32
-        self.learning_rate = 5e-4
-        self.early_stop_count = 4
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.early_stop_count = early_stop_count
+        self.epochs = epochs
+
+        #self.epochs = 5
+        #self.batch_size = 32
+        #self.learning_rate = 5e-4
+        #self.early_stop_count = 4
 
         # Architecture
 
@@ -108,6 +119,8 @@ class Trainer:
         self.dataloader_train, self.dataloader_val, self.dataloader_test = load_cifar10(self.batch_size)
 
         self.validation_check = len(self.dataloader_train) // 2
+        self.global_step = 0
+        self.start_time = time.time()
 
         # Tracking variables
         self.VALIDATION_LOSS = []
@@ -137,6 +150,7 @@ class Trainer:
         )
         self.VALIDATION_ACC.append(validation_acc)
         self.VALIDATION_LOSS.append(validation_loss)
+
         print("Current validation loss:", validation_loss, " Accuracy:", validation_acc)
         # Compute for testing set
         test_loss, test_acc = compute_loss_and_accuracy(
@@ -164,12 +178,36 @@ class Trainer:
             previous_loss = current_loss
         return True
 
+    def save_model(self):
+        def is_best_model():
+            """
+                Returns True if current model has the lowest validation loss
+            """
+            validation_losses = list(self.VALIDATION_LOSS.values())
+            return validation_losses[-1] == min(validation_losses)
+
+        state_dict = self.model.state_dict()
+        filepath = self.checkpoint_dir.joinpath(f"{self.global_step}.ckpt")
+
+        utils.save_checkpoint(state_dict, filepath, is_best_model())
+
+    def load_best_model(self):
+        state_dict = utils.load_best_checkpoint(self.checkpoint_dir)
+        if state_dict is None:
+            print(
+                f"Could not load best checkpoint. Did not find under: {self.checkpoint_dir}")
+            return
+        self.model.load_state_dict(state_dict)
+
     def train(self):
         """
                 Trains the model for [self.epochs] epochs.
                 """
         # Track initial loss/accuracy
         self.validation_epoch()
+        def should_validate_model():
+            return self.global_step % self.num_steps_per_val == 0
+
         for epoch in range(self.epochs):
             print("Epoch: ", epoch)
             # Perform a full pass through all the training samples
@@ -193,23 +231,38 @@ class Trainer:
 
                 # Reset all computed gradients to 0
                 self.optimizer.zero_grad()
+
+                self.global_step +=1
                 # Compute loss/accuracy for all three datasets.
             # if batch_it % self.validation_check == 0:
-            self.validation_epoch()
+            if should_validate_model():
+                self.validation_epoch()
+                self.save_model()
             # Check early stopping criteria.
             if self.should_early_stop():
                 print("Early stopping.")
                 return
-        torch.save(self.model,"/Users/AndreaViktoria/Documents/Uni/NTNU_SoSe/ComputerVision/ComputerVisionBlatt3.1/assignment3")
+        self.save_model()
+
+
 
 
 
 if __name__ == "__main__":
-    model = torch.load("/Users/AndreaViktoria/Documents/Uni/NTNU_SoSe/ComputerVision/ComputerVisionBlatt3.1/assignment3")
+    epochs = 5
+    batch_size = 32
+    learning_rate = 5e-4
+    early_stop_count = 4
+
+    model = Trainer.load_best_model
     model.eval()
 
 
-    trainer = Trainer()
+    trainer = Trainer(batch_size,
+        learning_rate,
+        early_stop_count,
+        epochs,
+        model)
     trainer.train()
     os.makedirs("plots", exist_ok=True)
     # Save plots and show them
@@ -246,4 +299,5 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig(os.path.join("plots", "comparison.png"))
     plt.show()
+
 
