@@ -23,11 +23,8 @@ def compute_loss_and_accuracy(
     Returns:
         [average_loss, accuracy]: both scalar.
     """
-    loss_avg = 0
-    total_correct = 0
-    total_images = 0
-    total_steps = 0
-
+    dataset_size = 0
+    correct = 0
     average_loss = 0
     accuracy = 0
 
@@ -39,31 +36,16 @@ def compute_loss_and_accuracy(
             # Forward pass the images through our model
             output_probs = model(X_batch)
 
-            # Compute loss
-            loss = loss_criterion(output_probs, Y_batch)
-
-            # Predicted class is the max index over the column dimension
-            predictions = output_probs.argmax(dim=1).squeeze()
-            Y_batch = Y_batch.squeeze()
-
-            # Update tracking variables
-            loss_avg += loss.item()
-            total_steps += 1
-            total_correct += (predictions == Y_batch).sum().item()
-            total_images += predictions.shape[0]
-        loss_avg = loss_avg / total_steps
-        accuracy = total_correct / total_images
-
-    return loss_avg, accuracy
+            dataset_size += len(X_batch)
 
             # Compute Loss and Accuracy
-           # average_loss = ((Y_batch * torch.log(output_probs)).sum()).mean()
-            #result_output = torch.argmax(output_probs, axis=1)
-           # targets = torch.argmax(Y_batch, axis=1)
-            #correct = targets == result_output
-           # accuracy = torch.mean(correct)
+            correct += (torch.argmax(output_probs, dim=1) == Y_batch).float().sum()
+            average_loss += loss_criterion(output_probs, Y_batch)
 
-    #return average_loss, accuracy
+        average_loss /= len(dataloader)
+        accuracy = 100 * correct / dataset_size
+
+    return average_loss, accuracy
 
 
 class ExampleModel(nn.Module):
@@ -89,8 +71,8 @@ class ExampleModel(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(
                 in_channels=num_filters,
                 out_channels=64,
@@ -98,8 +80,8 @@ class ExampleModel(nn.Module):
                 stride=1,
                 padding=2
             ),
-            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(
                 in_channels=64,
                 out_channels=128,
@@ -110,18 +92,14 @@ class ExampleModel(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )
-
-        # The output of feature_extractor will be [batch_size, num_filters, 4, 4]
+        # The output of feature_extractor will be [batch_size, num_filters, 16, 16]
         #self.num_output_features = 32*32*32
-        self.num_output_features = 4 * 4 * 128
+        self.num_output_features = 128*4*4
         # Initialize our last fully connected layer
         # Inputs all extracted features from the convolutional layers
         # Outputs num_classes predictions, 1 for each class.
         # There is no need for softmax activation function, as this is
         # included with nn.CrossEntropyLoss
-        self.classifier = nn.Sequential(
-            nn.Linear(self.num_output_features, num_classes),
-        )
         self.classifier = nn.Sequential(
             nn.Linear(self.num_output_features, 64),
             nn.ReLU(),
@@ -153,7 +131,9 @@ class Trainer:
                  early_stop_count: int,
                  epochs: int,
                  model: torch.nn.Module,
-                 dataloaders: typing.List[torch.utils.data.DataLoader]):
+                 dataloaders: typing.List[torch.utils.data.DataLoader],
+                 use_adam_optimizer=False,
+                 adam_weight_decay=0.0):
         """
             Initialize our trainer class.
         """
@@ -170,9 +150,11 @@ class Trainer:
         self.model = utils.to_cuda(self.model)
         print(self.model)
 
-        # Define our optimizer. SGD = Stochastich Gradient Descent
-        self.optimizer = torch.optim.SGD(self.model.parameters(),
-                                         self.learning_rate)
+        # Define our optimizer.
+        if use_adam_optimizer: # Adam optimizer
+            self.optimizer = torch.optim.Adam(self.model.parameters(), self.learning_rate, weight_decay=adam_weight_decay)
+        else: # SGD = Stochastic Gradient Descent
+            self.optimizer = torch.optim.SGD(self.model.parameters(), self.learning_rate)
 
         # Load our dataset
         self.dataloader_train, self.dataloader_val, self.dataloader_test = dataloaders
